@@ -28,22 +28,18 @@ model = load_model()
 if model is None:
     st.stop()
 
-# Attempt to get feature names from model or fallback
-try:
-    expected_columns = model.named_steps['preprocessor'].get_feature_names_out().tolist()
-    st.success("✅ Model loaded successfully with pipeline feature names!")
-except Exception as e:
-    st.warning(f"Warning: {e}. Using fallback column names.")
-    expected_columns = [
-        'num__MktCoupons', 'num__OriginCityMarketID', 'num__DestCityMarketID', 'num__OriginAirportID',
-        'num__DestAirportID', 'num__Carrier', 'num__NonStopMiles', 'num__RoundTrip', 'num__ODPairID',
-        'num__Pax', 'num__CarrierPax', 'num__Market_share', 'num__Market_HHI', 'num__LCC_Comp',
-        'num__Multi_Airport', 'num__Circuity', 'num__Slot', 'num__Non_Des', 'num__MktMilesFlown',
-        'num__OriginCityMarketID_freq', 'num__DestCityMarketID_freq', 'num__OriginAirportID_freq',
-        'num__DestAirportID_freq', 'num__Carrier_freq', 'num__ODPairID_freq', 'num__DaysToDeparture',
-        'num__FarePerMile', 'num__CarrierShare', 'num__IsWeekendDeparture', 'num__IsLCC'
-    ]
-    st.success("✅ Model loaded successfully with fallback feature names.")
+# Use original training column names
+expected_columns = [
+    'Carrier', 'DaysToDeparture', 'MktMilesFlown', 'NonStopMiles', 'CarrierPax', 'Pax',
+    'LCC_Comp', 'Market_HHI', 'Market_share', 'MktCoupons', 'DepartureMonth',
+    'DepartureDayOfWeek', 'RoundTrip', 'ODPairID', 'Multi_Airport', 'Slot', 'Non_Des',
+    'OriginCityMarketID', 'DestCityMarketID', 'OriginAirportID', 'DestAirportID',
+    'OriginCityMarketID_freq', 'DestCityMarketID_freq', 'OriginAirportID_freq',
+    'DestAirportID_freq', 'Carrier_freq', 'ODPairID_freq', 'Circuity',
+    'FarePerMile', 'CarrierShare', 'IsWeekendDeparture', 'IsLCC'
+]
+
+st.success("✅ Model loaded successfully with original feature names.")
 
 # Carrier mapping
 carrier_mapping = {
@@ -70,7 +66,7 @@ mkt_coupons = st.sidebar.number_input("Market Coupons", min_value=0, max_value=1
 departure_month = st.sidebar.slider("Departure Month", 1, 12, 6)
 departure_day_of_week = st.sidebar.slider("Departure Day of Week (0=Mon, 6=Sun)", 0, 6, 3)
 
-# Engineered features
+# Feature engineering
 non_stop = 1 if mkt_miles_flown == non_stop_miles else 0
 is_weekend_departure = 1 if departure_day_of_week in [5, 6] else 0
 is_lcc = 1 if lcc_comp > 0 else 0
@@ -78,43 +74,46 @@ carrier_share = carrier_pax / pax if pax > 0 else 0
 circuity = mkt_miles_flown / non_stop_miles if non_stop_miles > 0 else 1
 fare_per_mile = 0.25
 
-features = {
-    'MktCoupons': mkt_coupons,
-    'OriginCityMarketID': 31703,
-    'DestCityMarketID': 31703,
-    'OriginAirportID': 11292,
-    'DestAirportID': 11292,
-    'Carrier': list(carrier_mapping.values()).index(carrier),
-    'NonStopMiles': non_stop_miles,
-    'RoundTrip': 1,
-    'ODPairID': 123456,
-    'Pax': pax,
-    'CarrierPax': carrier_pax,
-    'Market_share': market_share,
-    'Market_HHI': market_hhi,
-    'LCC_Comp': lcc_comp,
-    'Multi_Airport': 0,
-    'Circuity': circuity,
-    'Slot': 0,
-    'Non_Des': non_stop,
-    'MktMilesFlown': mkt_miles_flown,
-    'OriginCityMarketID_freq': 1000,
-    'DestCityMarketID_freq': 1000,
-    'OriginAirportID_freq': 1000,
-    'DestAirportID_freq': 1000,
-    'Carrier_freq': 1000,
-    'ODPairID_freq': 1000,
-    'DaysToDeparture': days_to_departure,
-    'FarePerMile': fare_per_mile,
-    'CarrierShare': carrier_share,
-    'IsWeekendDeparture': is_weekend_departure,
-    'IsLCC': is_lcc
-}
+# Construct input dataframe
+input_data = pd.DataFrame({
+    'Carrier': [list(carrier_mapping.values()).index(carrier)],
+    'DaysToDeparture': [days_to_departure],
+    'MktMilesFlown': [mkt_miles_flown],
+    'NonStopMiles': [non_stop_miles],
+    'CarrierPax': [carrier_pax],
+    'Pax': [pax],
+    'LCC_Comp': [lcc_comp],
+    'Market_HHI': [market_hhi],
+    'Market_share': [market_share],
+    'MktCoupons': [mkt_coupons],
+    'DepartureMonth': [departure_month],
+    'DepartureDayOfWeek': [departure_day_of_week],
+    'RoundTrip': [1],
+    'ODPairID': [123456],
+    'Multi_Airport': [0],
+    'Slot': [0],
+    'Non_Des': [non_stop],
+    'OriginCityMarketID': [31703],
+    'DestCityMarketID': [31703],
+    'OriginAirportID': [11292],
+    'DestAirportID': [11292],
+    'OriginCityMarketID_freq': [1000],
+    'DestCityMarketID_freq': [1000],
+    'OriginAirportID_freq': [1000],
+    'DestAirportID_freq': [1000],
+    'Carrier_freq': [1000],
+    'ODPairID_freq': [1000],
+    'Circuity': [circuity],
+    'FarePerMile': [fare_per_mile],
+    'CarrierShare': [carrier_share],
+    'IsWeekendDeparture': [is_weekend_departure],
+    'IsLCC': [is_lcc]
+})
 
-input_dict = {f"num__{k}": [v] for k, v in features.items()}
-input_data = pd.DataFrame(input_dict)
+# Ensure proper column order
 input_data = input_data.reindex(columns=expected_columns, fill_value=0)
 
+# Prediction
 try:
     prediction = model.predict(input_data)[0]
     st.subheader("Predicted Fare")
@@ -122,6 +121,7 @@ try:
 except Exception as e:
     st.error(f"Prediction error: {e}")
 
+# Footer
 st.markdown("""
 **About**: This app uses a Random Forest model trained on the MarketFarePredictionData dataset from Mendeley, collected by the US Department of Transportation (May 15, 2025).  
 Dataset link: [Mendeley](https://data.mendeley.com/datasets/m5mvxdx2wp/2)
