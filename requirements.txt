@@ -8,5 +8,3 @@ catboost
 seaborn
 joblib
 
-# Pull LFS files during deployment
-git+https://github.com/git-lfs/git-lfs
