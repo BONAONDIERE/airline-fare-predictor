@@ -28,11 +28,10 @@ expected_columns = [
     'num__FarePerMile', 'num__CarrierShare', 'num__IsWeekendDeparture', 'num__IsLCC'
 ]
 
-# Load model from Google Drive
+# Load model from Hugging Face
 @st.cache_resource
-def load_model_from_drive():
-    file_id = "1_5qDOp1fF3IMrIsNxkDRXnYtfVej5hTU"
-    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+def load_model():
+    url = "https://huggingface.co/BONAONDIERE/airfare-model/resolve/main/rf_pipeline_model.pkl?download=true"
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -41,8 +40,7 @@ def load_model_from_drive():
         st.error(f"❌ Error loading model: {e}")
         return None
 
-# Load the trained model
-model = load_model_from_drive()
+model = load_model()
 
 if model:
     if hasattr(model, 'named_steps') and 'preprocessor' in model.named_steps:
