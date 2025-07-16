@@ -4,6 +4,8 @@ import numpy as np
 import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
+import requests
+import io
 
 # Set page configuration
 st.set_page_config(page_title="Airline Fare Prediction", layout="wide")
@@ -26,10 +28,22 @@ expected_columns = [
     'num__FarePerMile', 'num__CarrierShare', 'num__IsWeekendDeparture', 'num__IsLCC'
 ]
 
+# Load model from Google Drive
+@st.cache_resource
+def load_model_from_drive():
+    file_id = "1_5qDOp1fF3IMrIsNxkDRXnYtfVej5hTU"
+    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        return joblib.load(io.BytesIO(response.content))
+    else:
+        st.error("❌ Failed to load model from Google Drive.")
+        return None
+
 # Load the trained model
 try:
-    model = joblib.load('/content/drive/MyDrive/Datasets/rf_pipeline_model.pkl')
-    # Check if model is a scikit-learn pipeline
+    model = load_model_from_drive()
+
     if hasattr(model, 'named_steps') and 'preprocessor' in model.named_steps:
         try:
             expected_columns = model.named_steps['preprocessor'].get_feature_names_out().tolist()
@@ -38,11 +52,11 @@ try:
             st.warning(f"Failed to get feature names from pipeline: {e}. Using fallback columns.")
     else:
         st.warning("Model is not a pipeline; using predefined feature list.")
-    st.success("Model loaded successfully!")
+    st.success("✅ Model loaded successfully!")
     st.write("Model type:", str(type(model)))
     st.write("Expected columns:", expected_columns)
 except Exception as e:
-    st.error(f"Error loading model: {e}")
+    st.error(f"❌ Error loading model: {e}")
     st.stop()
 
 # Carrier mapping
@@ -58,9 +72,9 @@ carrier_mapping = {
 # Load dataset for placeholders and FarePerMile
 try:
     df = pd.read_csv('/content/drive/MyDrive/Datasets/MarketFarePredictionData.csv')
-    df.columns = df.columns.str.strip()  # Normalize column names
+    df.columns = df.columns.str.strip()
     st.write("Dataset Columns in app.py:", df.columns.tolist())
-    st.write("Column dtypes:", df.dtypes.to_dict())  # Debugging output
+    st.write("Column dtypes:", df.dtypes.to_dict())
     placeholder_cols = [
         'OriginCityMarketID', 'DestCityMarketID', 'OriginAirportID', 'DestAirportID',
         'RoundTrip', 'ODPairID', 'Multi_Airport', 'Slot', 'Non_Des',
@@ -76,34 +90,22 @@ try:
                     if not df[col].isna().all():
                         median_value = df[col].median()
                         placeholder_values[col] = median_value if not pd.isna(median_value) else 0
-                        st.write(f"Non_Des converted to numeric, median: {placeholder_values[col]}")
                     else:
-                        st.warning(f"Warning: {col} is all NaN after conversion, using 0 as placeholder.")
+                        st.warning(f"{col} is all NaN after conversion, using 0 as placeholder.")
                         placeholder_values[col] = 0
                 elif df[col].dtype in ['int64', 'float64'] and not df[col].isna().all():
                     median_value = df[col].median()
-                    if pd.isna(median_value):
-                        st.warning(f"Warning: {col} median is NaN, using 0 as placeholder.")
-                        placeholder_values[col] = 0
-                    else:
-                        placeholder_values[col] = median_value
+                    placeholder_values[col] = 0 if pd.isna(median_value) else median_value
                 else:
-                    st.warning(f"Warning: {col} is non-numeric (type: {df[col].dtype}) or all NaN, using 0 as placeholder.")
                     placeholder_values[col] = 0
             else:
-                st.warning(f"Warning: {col} is missing, using 0 as placeholder.")
                 placeholder_values[col] = 0
         except Exception as e:
-            st.warning(f"Error processing {col}: {e}, using 0 as placeholder.")
             placeholder_values[col] = 0
-    st.write("Placeholder values:", placeholder_values)  # Debugging output
-
-    # Calculate median FarePerMile
     df['FarePerMile'] = df['Average_Fare'] / df['MktMilesFlown']
     df['FarePerMile'] = df['FarePerMile'].replace([np.inf, -np.inf], np.nan)
     fare_per_mile_median = df['FarePerMile'].median()
     if pd.isna(fare_per_mile_median):
-        st.error("FarePerMile median is NaN, using 0 as fallback.")
         fare_per_mile_median = 0
 except Exception as e:
     st.error(f"Error processing dataset: {e}")
@@ -116,7 +118,7 @@ except Exception as e:
     }
     fare_per_mile_median = 0
 
-# Sidebar for user input
+# Sidebar input
 st.sidebar.header("Flight Details")
 carrier = st.sidebar.selectbox("Carrier", list(carrier_mapping.values()))
 days_to_departure = st.sidebar.slider("Days to Departure", 1, 90, 30)
@@ -131,7 +133,7 @@ mkt_coupons = st.sidebar.number_input("Market Coupons", min_value=0, max_value=1
 departure_month = st.sidebar.slider("Departure Month", 1, 12, 6)
 departure_day_of_week = st.sidebar.slider("Departure Day of Week (0=Mon, 6=Sun)", 0, 6, 3)
 
-# Feature Engineering
+# Feature engineering
 non_stop = 1 if mkt_miles_flown == non_stop_miles else 0
 is_weekend_departure = 1 if departure_day_of_week in [5, 6] else 0
 is_lcc = 1 if lcc_comp > 0 else 0
@@ -139,7 +141,7 @@ carrier_share = carrier_pax / pax if pax > 0 else 0
 circuity = mkt_miles_flown / non_stop_miles if non_stop_miles > 0 else 1
 fare_per_mile = fare_per_mile_median
 
-# Input data
+# Prepare input data
 input_data = pd.DataFrame({
     'num__MktCoupons': [mkt_coupons],
     'num__OriginCityMarketID': [placeholder_values['OriginCityMarketID']],
@@ -172,11 +174,9 @@ input_data = pd.DataFrame({
     'num__IsWeekendDeparture': [is_weekend_departure],
     'num__IsLCC': [is_lcc]
 })
-
-# Ensure correct column order
 input_data = input_data.reindex(columns=expected_columns, fill_value=0)
 
-# Predict fare
+# Prediction
 try:
     prediction = model.predict(input_data)[0]
     st.subheader("Predicted Fare")
