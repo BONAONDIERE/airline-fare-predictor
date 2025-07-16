@@ -28,15 +28,22 @@ model = load_model()
 if model is None:
     st.stop()
 
-# Get the expected input feature names from the pipeline
+# Attempt to get feature names from model or fallback
 try:
     expected_columns = model.named_steps['preprocessor'].get_feature_names_out().tolist()
-    st.success("✅ Model loaded successfully!")
-    st.write("Model type:", str(type(model)))
-    st.write("Expected columns:", expected_columns)
+    st.success("✅ Model loaded successfully with pipeline feature names!")
 except Exception as e:
-    st.error(f"Error extracting feature names: {e}")
-    st.stop()
+    st.warning(f"Warning: {e}. Using fallback column names.")
+    expected_columns = [
+        'num__MktCoupons', 'num__OriginCityMarketID', 'num__DestCityMarketID', 'num__OriginAirportID',
+        'num__DestAirportID', 'num__Carrier', 'num__NonStopMiles', 'num__RoundTrip', 'num__ODPairID',
+        'num__Pax', 'num__CarrierPax', 'num__Market_share', 'num__Market_HHI', 'num__LCC_Comp',
+        'num__Multi_Airport', 'num__Circuity', 'num__Slot', 'num__Non_Des', 'num__MktMilesFlown',
+        'num__OriginCityMarketID_freq', 'num__DestCityMarketID_freq', 'num__OriginAirportID_freq',
+        'num__DestAirportID_freq', 'num__Carrier_freq', 'num__ODPairID_freq', 'num__DaysToDeparture',
+        'num__FarePerMile', 'num__CarrierShare', 'num__IsWeekendDeparture', 'num__IsLCC'
+    ]
+    st.success("✅ Model loaded successfully with fallback feature names.")
 
 # Carrier mapping
 carrier_mapping = {
@@ -69,9 +76,8 @@ is_weekend_departure = 1 if departure_day_of_week in [5, 6] else 0
 is_lcc = 1 if lcc_comp > 0 else 0
 carrier_share = carrier_pax / pax if pax > 0 else 0
 circuity = mkt_miles_flown / non_stop_miles if non_stop_miles > 0 else 1
-fare_per_mile = 0.25  # default placeholder
+fare_per_mile = 0.25
 
-# Feature dictionary
 features = {
     'MktCoupons': mkt_coupons,
     'OriginCityMarketID': 31703,
@@ -105,12 +111,10 @@ features = {
     'IsLCC': is_lcc
 }
 
-# Prefix the keys with 'num__' as required by the model's preprocessor
 input_dict = {f"num__{k}": [v] for k, v in features.items()}
 input_data = pd.DataFrame(input_dict)
 input_data = input_data.reindex(columns=expected_columns, fill_value=0)
 
-# Prediction
 try:
     prediction = model.predict(input_data)[0]
     st.subheader("Predicted Fare")
@@ -118,7 +122,6 @@ try:
 except Exception as e:
     st.error(f"Prediction error: {e}")
 
-# Footer
 st.markdown("""
 **About**: This app uses a Random Forest model trained on the MarketFarePredictionData dataset from Mendeley, collected by the US Department of Transportation (May 15, 2025).  
 Dataset link: [Mendeley](https://data.mendeley.com/datasets/m5mvxdx2wp/2)
