@@ -33,17 +33,18 @@ expected_columns = [
 def load_model_from_drive():
     file_id = "1_5qDOp1fF3IMrIsNxkDRXnYtfVej5hTU"
     url = f"https://drive.google.com/uc?export=download&id={file_id}"
-    response = requests.get(url)
-    if response.status_code == 200:
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
         return joblib.load(io.BytesIO(response.content))
-    else:
-        st.error("❌ Failed to load model from Google Drive.")
+    except Exception as e:
+        st.error(f"❌ Error loading model: {e}")
         return None
 
 # Load the trained model
-try:
-    model = load_model_from_drive()
+model = load_model_from_drive()
 
+if model:
     if hasattr(model, 'named_steps') and 'preprocessor' in model.named_steps:
         try:
             expected_columns = model.named_steps['preprocessor'].get_feature_names_out().tolist()
@@ -55,8 +56,7 @@ try:
     st.success("✅ Model loaded successfully!")
     st.write("Model type:", str(type(model)))
     st.write("Expected columns:", expected_columns)
-except Exception as e:
-    st.error(f"❌ Error loading model: {e}")
+else:
     st.stop()
 
 # Carrier mapping
@@ -69,54 +69,15 @@ carrier_mapping = {
     23: 'GoJet Airlines', 24: 'Trans States Airlines'
 }
 
-# Load dataset for placeholders and FarePerMile
-try:
-    df = pd.read_csv('/content/drive/MyDrive/Datasets/MarketFarePredictionData.csv')
-    df.columns = df.columns.str.strip()
-    st.write("Dataset Columns in app.py:", df.columns.tolist())
-    st.write("Column dtypes:", df.dtypes.to_dict())
-    placeholder_cols = [
-        'OriginCityMarketID', 'DestCityMarketID', 'OriginAirportID', 'DestAirportID',
-        'RoundTrip', 'ODPairID', 'Multi_Airport', 'Slot', 'Non_Des',
-        'OriginCityMarketID_freq', 'DestCityMarketID_freq', 'OriginAirportID_freq',
-        'DestAirportID_freq', 'Carrier_freq', 'ODPairID_freq'
-    ]
-    placeholder_values = {}
-    for col in placeholder_cols:
-        try:
-            if col in df.columns:
-                if col == 'Non_Des' and df[col].dtype not in ['int64', 'float64']:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
-                    if not df[col].isna().all():
-                        median_value = df[col].median()
-                        placeholder_values[col] = median_value if not pd.isna(median_value) else 0
-                    else:
-                        st.warning(f"{col} is all NaN after conversion, using 0 as placeholder.")
-                        placeholder_values[col] = 0
-                elif df[col].dtype in ['int64', 'float64'] and not df[col].isna().all():
-                    median_value = df[col].median()
-                    placeholder_values[col] = 0 if pd.isna(median_value) else median_value
-                else:
-                    placeholder_values[col] = 0
-            else:
-                placeholder_values[col] = 0
-        except Exception as e:
-            placeholder_values[col] = 0
-    df['FarePerMile'] = df['Average_Fare'] / df['MktMilesFlown']
-    df['FarePerMile'] = df['FarePerMile'].replace([np.inf, -np.inf], np.nan)
-    fare_per_mile_median = df['FarePerMile'].median()
-    if pd.isna(fare_per_mile_median):
-        fare_per_mile_median = 0
-except Exception as e:
-    st.error(f"Error processing dataset: {e}")
-    placeholder_values = {
-        'OriginCityMarketID': 31703, 'DestCityMarketID': 31703, 'OriginAirportID': 11292,
-        'DestAirportID': 11292, 'RoundTrip': 1, 'ODPairID': 123456, 'Multi_Airport': 0,
-        'Slot': 0, 'Non_Des': 0, 'OriginCityMarketID_freq': 1000, 'DestCityMarketID_freq': 1000,
-        'OriginAirportID_freq': 1000, 'DestAirportID_freq': 1000, 'Carrier_freq': 1000,
-        'ODPairID_freq': 1000
-    }
-    fare_per_mile_median = 0
+# Placeholder values
+placeholder_values = {
+    'OriginCityMarketID': 31703, 'DestCityMarketID': 31703, 'OriginAirportID': 11292,
+    'DestAirportID': 11292, 'RoundTrip': 1, 'ODPairID': 123456, 'Multi_Airport': 0,
+    'Slot': 0, 'Non_Des': 0, 'OriginCityMarketID_freq': 1000, 'DestCityMarketID_freq': 1000,
+    'OriginAirportID_freq': 1000, 'DestAirportID_freq': 1000, 'Carrier_freq': 1000,
+    'ODPairID_freq': 1000
+}
+fare_per_mile_median = 0.25
 
 # Sidebar input
 st.sidebar.header("Flight Details")
@@ -176,49 +137,13 @@ input_data = pd.DataFrame({
 })
 input_data = input_data.reindex(columns=expected_columns, fill_value=0)
 
-# Prediction
+# Predict
 try:
     prediction = model.predict(input_data)[0]
     st.subheader("Predicted Fare")
     st.write(f"The predicted average fare is **${prediction:.2f}**")
 except Exception as e:
     st.error(f"Prediction error: {e}")
-
-# Visualizations
-st.subheader("Data Visualizations")
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "Fare Distribution", "Correlation Heatmap", "Fares by Month", "Fares by Days", "Feature Importance"
-])
-
-with tab1:
-    try:
-        st.image('/content/drive/MyDrive/Datasets/fare_distribution.png', caption="Distribution of Airline Fares")
-    except:
-        st.warning("Fare distribution image not found.")
-
-with tab2:
-    try:
-        st.image('/content/drive/MyDrive/Datasets/correlation_heatmap.png', caption="Correlation Heatmap")
-    except:
-        st.warning("Correlation heatmap image not found.")
-
-with tab3:
-    try:
-        st.image('/content/drive/MyDrive/Datasets/fares_by_month.png', caption="Fares by Departure Month")
-    except:
-        st.warning("Fares by month image not found.")
-
-with tab4:
-    try:
-        st.image('/content/drive/MyDrive/Datasets/fares_by_days.png', caption="Fares by Days to Departure")
-    except:
-        st.warning("Fares by days image not found.")
-
-with tab5:
-    try:
-        st.image('/content/drive/MyDrive/Datasets/feature_importance.png', caption="Feature Importance")
-    except:
-        st.warning("Feature importance image not found.")
 
 # Footer
 st.markdown("""
