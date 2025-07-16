@@ -1,3 +1,4 @@
+# Dependencies
 streamlit
 pandas
 numpy
@@ -5,4 +6,7 @@ scikit-learn
 xgboost
 catboost
 seaborn
-gdown
+joblib
+
+# Pull LFS files during deployment
+git+https://github.com/git-lfs/git-lfs
