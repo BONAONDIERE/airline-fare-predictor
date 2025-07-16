@@ -4,8 +4,6 @@ import numpy as np
 import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
-import requests
-import io
 
 # Set page configuration
 st.set_page_config(page_title="Airline Fare Prediction", layout="wide")
@@ -28,14 +26,11 @@ expected_columns = [
     'num__FarePerMile', 'num__CarrierShare', 'num__IsWeekendDeparture', 'num__IsLCC'
 ]
 
-# Load model from Hugging Face
+# Load model from local file (GitHub LFS)
 @st.cache_resource
 def load_model():
-    url = "https://huggingface.co/BONAONDIERE/airfare-model/resolve/main/rf_pipeline_model.pkl?download=true"
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        return joblib.load(io.BytesIO(response.content))
+        return joblib.load("rf_pipeline_model.pkl")
     except Exception as e:
         st.error(f"❌ Error loading model: {e}")
         return None
